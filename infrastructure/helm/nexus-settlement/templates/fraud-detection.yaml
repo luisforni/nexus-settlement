@@ -1,0 +1,149 @@
+{{- if .Values.fraudDetection.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-detection
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: fraud-detection
+    {{- include "nexus-settlement.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.fraudDetection.replicaCount }}
+  selector:
+    matchLabels:
+      app: fraud-detection
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: fraud-detection
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.fraudDetection.service.port }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: fraud-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fraud-detection
+          image: "{{ .Values.fraudDetection.image.repository }}:{{ .Values.fraudDetection.image.tag }}"
+          imagePullPolicy: {{ .Values.fraudDetection.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.fraudDetection.service.port }}
+          env:
+            {{- range $k, $v := .Values.fraudDetection.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- include "nexus-settlement.otelEnv" . | nindent 12 }}
+            - name: OTEL_SERVICE_NAME
+              value: fraud-detection
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-secrets
+                  key: bootstrap-servers
+          resources:
+            {{- toYaml .Values.fraudDetection.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/fraud/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/fraud/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          {{- if .Values.fraudDetection.persistence.enabled }}
+          volumeMounts:
+            - name: model-artifacts
+              mountPath: /app/artifacts
+          {{- end }}
+      {{- if .Values.fraudDetection.persistence.enabled }}
+      volumes:
+        - name: model-artifacts
+          persistentVolumeClaim:
+            claimName: fraud-model-artifacts-pvc
+      {{- end }}
+---
+{{- if .Values.fraudDetection.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fraud-model-artifacts-pvc
+  namespace: {{ .Values.namespace.name }}
+spec:
+  accessModes:
+    - {{ .Values.fraudDetection.persistence.accessMode }}
+  {{- if .Values.fraudDetection.persistence.storageClass }}
+  storageClassName: {{ .Values.fraudDetection.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.fraudDetection.persistence.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-detection
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: fraud-detection
+    {{- include "nexus-settlement.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: fraud-detection
+  ports:
+    - name: http
+      port: {{ .Values.fraudDetection.service.port }}
+      targetPort: http
+---
+{{- if .Values.fraudDetection.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fraud-detection-hpa
+  namespace: {{ .Values.namespace.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fraud-detection
+  minReplicas: {{ .Values.fraudDetection.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.fraudDetection.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.fraudDetection.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraud-detection-pdb
+  namespace: {{ .Values.namespace.name }}
+spec:
+  maxUnavailable: {{ .Values.fraudDetection.pdb.maxUnavailable }}
+  selector:
+    matchLabels:
+      app: fraud-detection
+{{- end }}

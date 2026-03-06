@@ -1,0 +1,348 @@
+{
+  "uid": "nexus-settlement-service",
+  "title": "Nexus — Settlement Service",
+  "description": "Latency, throughput, error rates, fraud scores and DB pool metrics for the Settlement Service.",
+  "tags": ["nexus", "settlement", "fastapi"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(http_requests_total{job=\"settlement-service\"}, instance)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Traffic & Latency",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 1, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"settlement-service\",instance=~\"$instance\"}[1m])) by (status)",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "P50 / P95 / P99 Latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 8, "y": 1, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"settlement-service\",instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"settlement-service\",instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"settlement-service\",instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (%)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 1, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "custom": { "lineWidth": 2, "fillOpacity": 15 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{job=\"settlement-service\",instance=~\"$instance\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"settlement-service\",instance=~\"$instance\"}[5m]))",
+          "legendFormat": "5xx error rate"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Settlement Business Metrics",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "title": "Settlements Created / min",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 10, "w": 6, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=\"settlement-service\",handler=\"/api/v1/settlements\",method=\"POST\",status=\"201\"}[1m]))",
+          "legendFormat": "created/min"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Settlements by Status",
+      "type": "piechart",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 6, "y": 10, "w": 6, "h": 5 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "targets": [
+        {
+          "expr": "sum(http_requests_total{job=\"settlement-service\",handler=~\"/api/v1/settlements.*\",method=\"GET\"}) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Idempotency Replays / min",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 10, "w": 6, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=\"settlement-service\",handler=\"/api/v1/settlements\",method=\"POST\",status=\"200\"}[1m]))",
+          "legendFormat": "idempotent returns/min"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Reversal Rate",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 18, "y": 10, "w": 6, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=\"settlement-service\",handler=~\".*/reverse\",method=\"PATCH\",status=\"200\"}[5m]))",
+          "legendFormat": "reversals/5m"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Fraud Detection",
+      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "title": "Fraud Score Distribution",
+      "type": "histogram",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_bucket{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\"}[5m])) by (le)",
+          "legendFormat": "{{le}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "Fraud Decisions",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2, "fillOpacity": 8 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "APPROVE" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "REVIEW" },  "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "BLOCK" },   "properties": [{ "id": "color", "value": { "fixedColor": "red",    "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\",status=\"200\"}[1m]))",
+          "legendFormat": "APPROVE"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\",status=\"202\"}[1m]))",
+          "legendFormat": "REVIEW"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\",status=\"403\"}[1m]))",
+          "legendFormat": "BLOCK"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Infrastructure",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "title": "DB Connection Pool — Active",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 25, "w": 6, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 30,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 28 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "pg_stat_database_numbackends{datname=\"nexus_settlement\"}",
+          "legendFormat": "active connections"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 6, "y": 25, "w": 9, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kafka_consumer_group_lag{group=\"nexus-consumer-group\"}) by (topic)",
+          "legendFormat": "{{topic}}"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "title": "Memory Usage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 15, "y": 25, "w": 9, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 2, "fillOpacity": 8 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=\"settlement-service\",instance=~\"$instance\"}",
+          "legendFormat": "settlement-service RSS"
+        },
+        {
+          "expr": "process_resident_memory_bytes{job=\"fraud-detection\"}",
+          "legendFormat": "fraud-detection RSS"
+        }
+      ]
+    }
+  ]
+}

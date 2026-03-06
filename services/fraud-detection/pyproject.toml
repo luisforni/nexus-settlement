@@ -1,0 +1,54 @@
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+    "S",  # flake8-bandit (security)
+    "N",  # pep8-naming
+]
+ignore = [
+    "S101", # assert statements — allowed in tests
+    "S311", # random — non-crypto use in feature engineering
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+exclude = ["tests/"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]          # assert in test files
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=75"
+
+# ── mutmut (mutation testing) ─────────────────────────────────────────
+# Install:  pip install mutmut
+# Run:      mutmut run
+# Results:  mutmut results
+[tool.mutmut]
+paths_to_mutate = "app/"
+backup = false
+runner = "python -m pytest tests/ -x -q --no-header"
+tests_dir = "tests/"
+# Narrow to the fraud detector model for targeted mutation testing:
+# paths_to_mutate = "app/models/fraud_detector.py"

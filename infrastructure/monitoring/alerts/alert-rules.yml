@@ -1,0 +1,210 @@
+groups:
+
+  - name: api_gateway
+    rules:
+      - alert: ApiGatewayHighErrorRate
+        expr: |
+          100 * sum(rate(http_requests_total{job="api-gateway",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="api-gateway"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: api-gateway
+        annotations:
+          summary: "API Gateway 5xx error rate > 1%"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}%. Investigate api-gateway logs."
+          runbook: "https://docs.nexus-settlement.internal/runbooks/api-gateway-errors"
+
+      - alert: ApiGatewayHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="api-gateway"}[5m])) by (le)
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "API Gateway P99 latency > 500ms"
+          description: "P99 latency is {{ $value | printf \"%.3f\" }}s."
+
+      - alert: ApiGatewayDown
+        expr: up{job="api-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api-gateway
+        annotations:
+          summary: "API Gateway is down"
+          description: "Instance {{ $labels.instance }} has been unreachable for > 1m."
+
+  - name: settlement_service
+    rules:
+      - alert: SettlementHighErrorRate
+        expr: |
+          100 * sum(rate(http_requests_total{job="settlement-service",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="settlement-service"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: settlement-service
+        annotations:
+          summary: "Settlement Service 5xx error rate > 1%"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}%."
+          runbook: "https://docs.nexus-settlement.internal/runbooks/settlement-errors"
+
+      - alert: SettlementHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="settlement-service"}[5m])) by (le)
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          service: settlement-service
+        annotations:
+          summary: "Settlement Service P99 latency > 500ms"
+          description: "P99 latency is {{ $value | printf \"%.3f\" }}s."
+
+      - alert: SettlementProcessorStuck
+        expr: |
+          rate(settlements_processed_total[10m]) == 0
+            and sum(kafka_consumer_group_lag{consumergroup="nexus-settlement-processor",topic="nexus.settlements"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: settlement-service
+        annotations:
+          summary: "Settlement processor appears stuck (Kafka lag growing, no throughput)"
+          description: "Consumer lag is growing but no settlements are being processed."
+
+      - alert: SettlementDLQDepthHigh
+        expr: |
+          sum(kafka_consumer_group_lag{topic="nexus.settlements.dlq"}) > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: settlement-service
+        annotations:
+          summary: "Settlement DLQ depth > 10 messages"
+          description: "{{ $value }} messages are stuck in the DLQ. Immediate investigation required."
+          runbook: "https://docs.nexus-settlement.internal/runbooks/dlq-investigation"
+
+      - alert: SettlementServiceDown
+        expr: up{job="settlement-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: settlement-service
+        annotations:
+          summary: "Settlement Service is down"
+          description: "Instance {{ $labels.instance }} unreachable."
+
+  - name: fraud_detection
+    rules:
+      - alert: FraudDetectionHighErrorRate
+        expr: |
+          100 * sum(rate(http_requests_total{job="fraud-detection",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="fraud-detection"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: critical
+          service: fraud-detection
+        annotations:
+          summary: "Fraud Detection 5xx error rate > 1%"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}%."
+
+      - alert: FraudScoringHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="fraud-detection",handler="/api/v1/fraud/score"}[5m])) by (le)
+          ) > 0.2
+        for: 3m
+        labels:
+          severity: warning
+          service: fraud-detection
+        annotations:
+          summary: "Fraud scoring P99 latency > 200ms"
+          description: "P99 scoring latency is {{ $value | printf \"%.3f\" }}s. Model inference may be degraded."
+
+      - alert: FraudBlockRateSurge
+        expr: |
+          100 * sum(rate(fraud_decisions_total{decision="BLOCK"}[10m]))
+              / sum(rate(fraud_decisions_total[10m])) > 15
+        for: 5m
+        labels:
+          severity: warning
+          service: fraud-detection
+        annotations:
+          summary: "Fraud block rate > 15% (potential model degradation or attack)"
+          description: "Block rate is {{ $value | printf \"%.1f\" }}% over the last 10m."
+
+      - alert: FraudDetectionDown
+        expr: up{job="fraud-detection"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: fraud-detection
+        annotations:
+          summary: "Fraud Detection service is down"
+          description: "Instance {{ $labels.instance }} unreachable. Settlements cannot be scored."
+
+  - name: notification_service
+    rules:
+      - alert: NotificationConsumerLagHigh
+        expr: |
+          sum(kafka_consumer_group_lag{consumergroup="notification-service"}) > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: notification-service
+        annotations:
+          summary: "Notification consumer lag > 500"
+          description: "Lag is {{ $value }}. Users may experience delayed notifications."
+
+      - alert: FraudDLQDepthHigh
+        expr: |
+          sum(kafka_consumer_group_lag{topic="nexus.fraud.dlq"}) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: fraud-detection
+        annotations:
+          summary: "Fraud DLQ depth > 5 messages"
+          description: "{{ $value }} fraud events are stuck in the DLQ."
+
+  - name: infrastructure
+    rules:
+      - alert: PostgresConnectionPoolExhausted
+        expr: |
+          db_pool_checked_out_connections{service="settlement-service"} /
+          (db_pool_checked_out_connections{service="settlement-service"} + db_pool_available_connections{service="settlement-service"})
+          > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          service: settlement-service
+        annotations:
+          summary: "PostgreSQL connection pool > 90% utilised"
+          description: "Pool saturation at {{ $value | printf \"%.1f\" }}%. Risk of request queuing."
+
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis memory > 85% of max"
+          description: "Redis is using {{ $value | printf \"%.1f\" }}% of its memory limit."
+
+      - alert: KafkaConsumerLagCritical
+        expr: |
+          max(kafka_consumer_group_lag{topic=~"nexus\\.settlements|nexus\\.fraud\\.alerts"}) > 1000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka consumer lag > 1000 on a critical topic"
+          description: "High lag on {{ $labels.topic }} for group {{ $labels.consumergroup }}."

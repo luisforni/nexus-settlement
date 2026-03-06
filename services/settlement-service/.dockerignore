@@ -1,0 +1,66 @@
+# Python byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Type-checking & linting caches
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+conftest.py
+
+# Alembic (migrations run as a separate job, not baked into the image)
+alembic/
+
+# Dev tooling config
+pyproject.toml
+*.cfg
+*.ini
+.editorconfig
+
+# ML artefacts (served from object storage, not baked into image)
+*.pkl
+*.joblib
+*.h5
+*.onnx
+
+# Environment & secrets
+.env
+.env.*
+*.secret
+.secrets.baseline
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore

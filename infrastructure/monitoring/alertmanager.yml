@@ -1,0 +1,105 @@
+global:
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alerts@nexus-settlement.example.com'
+  smtp_auth_username: 'alerts@nexus-settlement.example.com'
+  smtp_auth_password_file: '/etc/alertmanager/smtp-password'
+  smtp_require_tls: true
+  resolve_timeout: 5m
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: ops-email
+
+  routes:
+
+    - matchers:
+        - severity = critical
+      receiver: pagerduty-critical
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+
+    - matchers:
+        - alertname =~ ".*DLQ.*"
+      receiver: slack-dlq
+      group_wait: 15s
+      repeat_interval: 30m
+
+    - matchers:
+        - service = fraud-detection
+      receiver: risk-team-email
+      group_wait: 1m
+      repeat_interval: 2h
+
+    - matchers:
+        - severity = warning
+      receiver: slack-ops
+      group_wait: 1m
+      repeat_interval: 2h
+
+inhibit_rules:
+
+  - source_matchers:
+      - alertname =~ ".*Down"
+    target_matchers:
+      - severity = warning
+    equal: ['service']
+
+  - source_matchers:
+      - alertname = "SettlementServiceDown"
+    target_matchers:
+      - alertname = "SettlementProcessorStuck"
+
+receivers:
+  - name: ops-email
+    email_configs:
+      - to: 'ops-team@example.com'
+        send_resolved: true
+        headers:
+          Subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
+
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - routing_key_file: '/etc/alertmanager/pagerduty-key'
+        description: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+        severity: '{{ .CommonLabels.severity }}'
+        details:
+          service: '{{ .CommonLabels.service }}'
+          runbook: '{{ .CommonAnnotations.runbook }}'
+        send_resolved: true
+
+  - name: slack-ops
+    slack_configs:
+      - api_url_file: '/etc/alertmanager/slack-webhook-ops'
+        channel: '#nexus-ops'
+        send_resolved: true
+        icon_emoji: ':warning:'
+        title: '{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}'
+        text: |
+          *Service:* {{ .CommonLabels.service }}
+          *Severity:* {{ .CommonLabels.severity }}
+          {{ range .Alerts }}• {{ .Annotations.description }}{{ end }}
+
+  - name: slack-dlq
+    slack_configs:
+      - api_url_file: '/etc/alertmanager/slack-webhook-ops'
+        channel: '#nexus-dlq-alerts'
+        send_resolved: true
+        icon_emoji: ':dead_letter:'
+        title: '🚨 DLQ Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}{{ .Annotations.description }}
+          Runbook: {{ .Annotations.runbook }}{{ end }}
+
+  - name: risk-team-email
+    email_configs:
+      - to: 'risk-team@example.com'
+        send_resolved: true
+        headers:
+          Subject: '[FRAUD ALERT] {{ .GroupLabels.alertname }}'

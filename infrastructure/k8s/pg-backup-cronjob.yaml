@@ -1,0 +1,78 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-daily-backup
+  namespace: nexus-settlement
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+          serviceAccountName: pg-backup-sa
+          containers:
+            - name: pg-backup
+              image: postgres:15-alpine
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: nexus-db-credentials
+                      key: password
+                - name: PGHOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: nexus-config
+                      key: POSTGRES_HOST
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  value: nexus
+                - name: PGDATABASE
+                  value: nexus_settlement
+                - name: S3_BUCKET
+                  value: nexus-pg-backups
+                - name: AWS_DEFAULT_REGION
+                  value: us-east-1
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  FILENAME="nexus_settlement_$(date +%F_%H%M%S).dump"
+                  echo "→ Starting pg_dump: $FILENAME"
+                  pg_dump \
+                    --format=custom \
+                    --compress=9 \
+                    --file="/tmp/$FILENAME"
+                  echo "→ Uploading to s3://$S3_BUCKET/daily/$FILENAME"
+                  aws s3 cp "/tmp/$FILENAME" \
+                    "s3://$S3_BUCKET/daily/$FILENAME" \
+                    --sse aws:kms \
+                    --sse-kms-key-id alias/nexus-pg-backups
+                  echo "✓ Backup complete: $FILENAME"
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

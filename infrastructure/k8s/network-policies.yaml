@@ -1,0 +1,236 @@
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: nexus-settlement
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: nexus-settlement
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway
+  namespace: nexus-settlement
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+
+    - ports:
+        - port: 3000
+          protocol: TCP
+  egress:
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: settlement-service
+      ports:
+        - port: 8001
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: fraud-detection
+      ports:
+        - port: 8002
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - port: 4318
+          protocol: TCP
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: settlement-service
+  namespace: nexus-settlement
+spec:
+  podSelector:
+    matchLabels:
+      app: settlement-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - port: 8001
+          protocol: TCP
+
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8001
+          protocol: TCP
+  egress:
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: fraud-detection
+      ports:
+        - port: 8002
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - port: 4318
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vault
+      ports:
+        - port: 8200
+          protocol: TCP
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraud-detection
+  namespace: nexus-settlement
+spec:
+  podSelector:
+    matchLabels:
+      app: fraud-detection
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: settlement-service
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - port: 8002
+          protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8002
+          protocol: TCP
+  egress:
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - port: 4318
+          protocol: TCP
+---
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notification-service
+  namespace: nexus-settlement
+spec:
+  podSelector:
+    matchLabels:
+      app: notification-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8003
+          protocol: TCP
+  egress:
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
+          protocol: TCP
+
+    - to:
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - port: 4318
+          protocol: TCP
+
+    - ports:
+        - port: 443
+          protocol: TCP

@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nexus-settlement/contracts/settlement-event.json",
+  "title": "SettlementEvent",
+  "description": "Kafka event envelope for all settlement lifecycle events published on nexus.settlements",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "timestamp", "payload", "integrity_hash"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique event identifier (UUIDv4)"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "settlement.created",
+        "settlement.processing",
+        "settlement.completed",
+        "settlement.failed",
+        "settlement.cancelled",
+        "settlement.reversed"
+      ]
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of this schema"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of when the event was produced"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Caller-supplied idempotency key; echoed from original request"
+    },
+    "integrity_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 hex digest of the canonical JSON payload (OWASP A08)"
+    },
+    "payload": {
+      "type": "object",
+      "required": ["settlement_id", "status", "amount", "currency", "payer_id", "payee_id"],
+      "additionalProperties": false,
+      "properties": {
+        "settlement_id": { "type": "string", "format": "uuid" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED", "REVERSED"]
+        },
+        "amount": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d{2,8}$",
+          "description": "Decimal string to avoid floating-point precision loss"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO-4217 currency code"
+        },
+        "payer_id": { "type": "string", "format": "uuid" },
+        "payee_id": { "type": "string", "format": "uuid" },
+        "description": { "type": "string", "maxLength": 255 },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "maxProperties": 10
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optimistic lock version counter"
+        },
+        "risk_score": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraud risk score returned by fraud-detection service"
+        },
+        "fraud_decision": {
+          "type": ["string", "null"],
+          "enum": ["APPROVE", "REVIEW", "BLOCK", null]
+        },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "failed_at": { "type": ["string", "null"], "format": "date-time" },
+        "requesting_user_id": {
+          "type": ["string", "null"],
+          "format": "uuid",
+          "description": "ID of the user who initiated the state change"
+        },
+        "user_email": {
+          "type": ["string", "null"],
+          "description": "User email address for notifications"
+        },
+        "user_phone": {
+          "type": ["string", "null"],
+          "description": "User phone number in E.164 format for SMS notifications"
+        },
+        "webhook_url": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "HTTPS webhook URL to call on settlement events"
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Human-readable reason for failure or cancellation"
+        }
+      }
+    }
+  }
+}

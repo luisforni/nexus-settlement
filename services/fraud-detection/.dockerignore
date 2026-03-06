@@ -1,0 +1,61 @@
+# Python byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Type-checking & linting caches
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Dev tooling config
+pyproject.toml
+*.cfg
+.editorconfig
+
+# ML artefacts — the trained model is copied in at deploy time via 'make deploy-model'
+# and should NOT be baked into the image (large binary, env-specific version).
+artifacts/
+scripts/train_model.py
+scripts/retrain_pipeline.py
+
+# Environment & secrets
+.env
+.env.*
+*.secret
+.secrets.baseline
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore

@@ -1,0 +1,45 @@
+# Node.js build artefacts
+node_modules/
+dist/
+build/
+.npm/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test & coverage
+coverage/
+.nyc_output/
+jest_results/
+*.test.ts
+tests/
+
+# Dev config (not needed at runtime)
+.eslintrc*
+.eslintignore
+.prettierrc*
+tsconfig*.json
+jest.config.*
+stryker.config.*
+.editorconfig
+
+# Environment & secrets
+.env
+.env.*
+*.secret
+.secrets.baseline
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore

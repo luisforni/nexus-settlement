@@ -1,0 +1,285 @@
+{
+  "uid": "nexus-fraud-detection",
+  "title": "Nexus — Fraud Detection",
+  "description": "Scoring latency, decision distribution, model version, and risk score histograms for the Fraud Detection service.",
+  "tags": ["nexus", "fraud", "fastapi", "ml"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(http_requests_total{job=\"fraud-detection\"}, instance)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Throughput & Latency",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "title": "Scoring Rate (req/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 1, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "reqps",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(http_requests_total{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\"}[1m]))",
+          "legendFormat": "score req/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "P50 / P95 / P99 Scoring Latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 8, "y": 1, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\"}[1m])) by (le)) * 1000",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\"}[1m])) by (le)) * 1000",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"fraud-detection\",handler=\"/api/v1/fraud/score\"}[1m])) by (le)) * 1000",
+          "legendFormat": "P99 🔴"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (%)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 1, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{job=\"fraud-detection\",status=~\"5..\"}[1m])) / sum(rate(http_requests_total{job=\"fraud-detection\"}[1m]))",
+          "legendFormat": "5xx error %"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Decision Distribution",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "title": "Fraud Decisions (APPROVE / REVIEW / BLOCK)",
+      "type": "piechart",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 10, "w": 8, "h": 9 },
+      "options": { "displayLabels": ["name", "percent"], "legendDisplayMode": "table", "legendPlacement": "right" },
+      "targets": [
+        {
+          "expr": "sum(increase(fraud_decisions_total{decision=\"APPROVE\"}[1h]))",
+          "legendFormat": "APPROVE"
+        },
+        {
+          "expr": "sum(increase(fraud_decisions_total{decision=\"REVIEW\"}[1h]))",
+          "legendFormat": "REVIEW"
+        },
+        {
+          "expr": "sum(increase(fraud_decisions_total{decision=\"BLOCK\"}[1h]))",
+          "legendFormat": "BLOCK"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Decision Rate Over Time (req/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 8, "y": 10, "w": 8, "h": 9 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(fraud_decisions_total{decision=\"APPROVE\"}[1m]))",
+          "legendFormat": "APPROVE"
+        },
+        {
+          "expr": "sum(rate(fraud_decisions_total{decision=\"REVIEW\"}[1m]))",
+          "legendFormat": "REVIEW"
+        },
+        {
+          "expr": "sum(rate(fraud_decisions_total{decision=\"BLOCK\"}[1m]))",
+          "legendFormat": "BLOCK"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Block Rate (%)",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 10, "w": 8, "h": 9 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "showThresholdLabels": true },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(fraud_decisions_total{decision=\"BLOCK\"}[5m])) / sum(rate(fraud_decisions_total[5m]))",
+          "legendFormat": "Block rate"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Risk Score Distribution",
+      "gridPos": { "x": 0, "y": 19, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "title": "Risk Score Heatmap (rolling 1h)",
+      "type": "heatmap",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 9 },
+      "options": { "calculate": false, "yAxis": { "unit": "short", "decimals": 2 } },
+      "targets": [
+        {
+          "expr": "sum(rate(fraud_risk_score_bucket[5m])) by (le)",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Mean Risk Score",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 0.75 }
+            ]
+          },
+          "custom": { "lineWidth": 2, "fillOpacity": 15 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(fraud_risk_score_sum[1m])) / sum(rate(fraud_risk_score_count[1m]))",
+          "legendFormat": "mean risk score"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Model",
+      "gridPos": { "x": 0, "y": 29, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 13,
+      "title": "Model Version",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 30, "w": 6, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" } } },
+      "targets": [
+        {
+          "expr": "fraud_model_version_info",
+          "legendFormat": "{{version}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Model Inference (ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 6, "y": 30, "w": 18, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(fraud_model_inference_duration_seconds_bucket[1m])) by (le)) * 1000",
+          "legendFormat": "P95 inference"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(fraud_model_inference_duration_seconds_bucket[1m])) by (le)) * 1000",
+          "legendFormat": "P99 inference"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: nexus-settlement
+  labels:
+    app: api-gateway
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        tier: frontend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: api-gateway-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api-gateway
+          image: nexus/api-gateway:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: JWT_PUBLIC_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: public_key
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secrets
+                  key: url
+            - name: SETTLEMENT_SERVICE_URL
+              value: "http://settlement-service:8001"
+            - name: FRAUD_DETECTION_URL
+              value: "http://fraud-detection:8002"
+            - name: NOTIFICATION_SERVICE_URL
+              value: "http://notification-service:8003"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: nexus-settlement
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+  namespace: nexus-settlement
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+  namespace: nexus-settlement
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-gateway-sa
+  namespace: nexus-settlement
+  labels:
+    app: api-gateway
+automountServiceAccountToken: false

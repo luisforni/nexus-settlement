@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nexus-settlement
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: nexus
+
+  source:
+    repoURL: https://github.com/your-org/nexus-settlement.git
+    targetRevision: main
+    path: infrastructure/helm/nexus-settlement
+
+    helm:
+      releaseName: nexus-settlement
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nexus-settlement
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  ignoreDifferences:
+
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+
+  revisionHistoryLimit: 5

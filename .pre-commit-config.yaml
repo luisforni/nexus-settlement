@@ -1,0 +1,111 @@
+repos:
+  # ── Standard hooks ───────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]           # allow custom YAML tags (Helm templates)
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: no-commit-to-branch
+        args: [--branch=main, --branch=master]
+
+  # ── Secret scanning ──────────────────────────────────────────────────────────
+  # As referenced in SECURITY.md — prevents accidental credential commits
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: >
+          (?x)^(
+            \.secrets\.baseline|
+            infrastructure/terraform/terraform\.tfvars\.local|
+            \.env\.example
+          )$
+
+  # ── Python ───────────────────────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        types_or: [python, pyi]
+        files: ^services/(settlement-service|fraud-detection)/
+      - id: ruff-format
+        types_or: [python, pyi]
+        files: ^services/(settlement-service|fraud-detection)/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^services/(settlement-service|fraud-detection)/
+        additional_dependencies:
+          - types-requests
+          - sqlalchemy[mypy]
+        args: [--ignore-missing-imports]
+
+  # ── TypeScript / JavaScript ───────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: \.(ts|js|json|md|yml|yaml)$
+        exclude: >
+          (?x)^(
+            infrastructure/monitoring/grafana/.*\.json|
+            shared/contracts/openapi-.*\.json|
+            services/.*/dist/
+          )$
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint (notification-service)
+        language: node
+        entry: bash -c 'cd services/notification-service && npx eslint --max-warnings=0 "$@"' --
+        files: ^services/notification-service/src/.*\.(ts|js)$
+        types: [file]
+        pass_filenames: true
+
+      - id: eslint-api-gateway
+        name: ESLint (api-gateway)
+        language: node
+        entry: bash -c 'cd services/api-gateway && npx eslint --max-warnings=0 "$@"' --
+        files: ^services/api-gateway/src/.*\.(ts|js)$
+        types: [file]
+        pass_filenames: true
+
+  # ── Terraform ─────────────────────────────────────────────────────────────────
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.92.0
+    hooks:
+      - id: terraform_fmt
+        files: ^infrastructure/terraform/
+      - id: terraform_validate
+        files: ^infrastructure/terraform/
+        args:
+          - --args=-no-color
+          - --init-args=-backend=false   # Skip backend init in pre-commit
+      - id: terraform_tflint
+        files: ^infrastructure/terraform/
+
+  # ── Docker ────────────────────────────────────────────────────────────────────
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        files: Dockerfile$
+        args:
+          - --ignore=DL3008   # allow apt without --no-install-recommends in base images
+          - --ignore=DL3009

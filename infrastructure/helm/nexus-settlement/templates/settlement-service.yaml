@@ -1,0 +1,162 @@
+{{- if .Values.settlementService.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: settlement-service
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: settlement-service
+    {{- include "nexus-settlement.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.settlementService.replicaCount }}
+  selector:
+    matchLabels:
+      app: settlement-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: settlement-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.settlementService.service.port }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: settlement-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: settlement-service
+          image: "{{ .Values.settlementService.image.repository }}:{{ .Values.settlementService.image.tag }}"
+          imagePullPolicy: {{ .Values.settlementService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.settlementService.service.port }}
+          env:
+            {{- range $k, $v := .Values.settlementService.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- include "nexus-settlement.otelEnv" . | nindent 12 }}
+            - name: OTEL_SERVICE_NAME
+              value: settlement-service
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: host
+            - name: POSTGRES_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: port
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: password
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secrets
+                  key: url
+            - name: JWT_PUBLIC_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: public-key-base64
+            - name: JWT_ALGORITHM
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: algorithm
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-secrets
+                  key: bootstrap-servers
+          resources:
+            {{- toYaml .Values.settlementService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: settlement-service
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: settlement-service
+    {{- include "nexus-settlement.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: settlement-service
+  ports:
+    - name: http
+      port: {{ .Values.settlementService.service.port }}
+      targetPort: http
+---
+{{- if .Values.settlementService.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: settlement-service-hpa
+  namespace: {{ .Values.namespace.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: settlement-service
+  minReplicas: {{ .Values.settlementService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.settlementService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.settlementService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: settlement-service-pdb
+  namespace: {{ .Values.namespace.name }}
+spec:
+  minAvailable: {{ .Values.settlementService.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: settlement-service
+{{- end }}

@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nexus-settlement-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: nexus
+
+  source:
+    repoURL: https://github.com/your-org/nexus-settlement.git
+    targetRevision: develop
+    path: infrastructure/helm/nexus-settlement
+
+    helm:
+      releaseName: nexus-settlement-staging
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nexus-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 2m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+  revisionHistoryLimit: 3

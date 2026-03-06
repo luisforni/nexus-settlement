@@ -1,0 +1,169 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+namespace:
+  create: true
+  name: nexus-settlement
+
+apiGateway:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/api-gateway
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+    RATE_LIMIT_WINDOW_MS: "60000"
+    RATE_LIMIT_MAX_REQUESTS: "100"
+    CB_TIMEOUT_MS: "3000"
+    CB_ERROR_THRESHOLD_PCT: "50"
+    CB_RESET_TIMEOUT_MS: "30000"
+  upstreams:
+    settlement: "http://settlement-service:8001"
+    fraud: "http://fraud-detection:8002"
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+
+settlementService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/settlement-service
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8001
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  env:
+    ENVIRONMENT: production
+    SETTLEMENT_LOG_LEVEL: INFO
+    SETTLEMENT_WORKERS: "4"
+    SETTLEMENT_MAX_AMOUNT: "10000000.00"
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+
+fraudDetection:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: nexus/fraud-detection
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8002
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+  env:
+    ENVIRONMENT: production
+    FRAUD_LOG_LEVEL: INFO
+    FRAUD_WORKERS: "4"
+    FRAUD_RISK_THRESHOLD: "0.75"
+    FRAUD_MODEL_PATH: /app/artifacts/fraud_model.joblib
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 60
+  pdb:
+    maxUnavailable: "50%"
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 1Gi
+
+notificationService:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nexus/notification-service
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8003
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+  pdb:
+    minAvailable: 1
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: nexus-settlement.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+secrets:
+  postgres:
+    host: postgres
+    port: "5432"
+    db: nexus_settlement
+    user: nexus_user
+    password: CHANGE_ME
+  redis:
+    url: redis://:CHANGE_ME@redis:6379/0
+    password: CHANGE_ME
+  jwt:
+    publicKeyBase64: CHANGE_ME
+    algorithm: RS256
+  kafka:
+    bootstrapServers: kafka:29092
+
+otel:
+  enabled: true
+  endpoint: http://otel-collector:4318
+
+retrainCronjob:
+  enabled: true
+  schedule: "0 2 * * *"
+  nSamples: 50000
+  minAuc: "0.92"

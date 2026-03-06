@@ -1,0 +1,64 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "security:openssf-scorecard"
+  ],
+  "schedule": ["before 6am on monday"],
+  "timezone": "UTC",
+  "prHourlyLimit": 5,
+  "prConcurrentLimit": 10,
+  "packageRules": [
+    {
+      "matchManagers": ["pip_requirements", "poetry"],
+      "groupName": "Python dependencies",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "groupName": "Node.js dependencies",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true,
+      "automergeType": "pr",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchPackagePatterns": ["^@types/"],
+      "automerge": true
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "groupName": "Docker base images",
+      "pinDigests": true
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "automerge": true,
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchManagers": ["terraform"],
+      "groupName": "Terraform providers",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "matchPackagePatterns": ["fastapi", "sqlalchemy", "pydantic", "aiokafka"],
+      "groupName": "Core Python frameworks",
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": ["express", "kafkajs", "jsonwebtoken"],
+      "groupName": "Core Node.js frameworks",
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "osvVulnerabilityAlerts": true
+}

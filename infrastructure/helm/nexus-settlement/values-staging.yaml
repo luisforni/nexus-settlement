@@ -1,0 +1,119 @@
+apiGateway:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+    tag: "1.0.0-rc"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+    RATE_LIMIT_WINDOW_MS: "60000"
+    RATE_LIMIT_MAX_REQUESTS: "200"
+    CB_TIMEOUT_MS: "5000"
+    CB_ERROR_THRESHOLD_PCT: "50"
+    CB_RESET_TIMEOUT_MS: "30000"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+
+settlementService:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+    tag: "1.0.0-rc"
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  env:
+    ENVIRONMENT: staging
+    SETTLEMENT_LOG_LEVEL: INFO
+    SETTLEMENT_WORKERS: "4"
+    SETTLEMENT_MAX_AMOUNT: "10000000.00"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+
+fraudDetection:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+    tag: "1.0.0-rc"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+  env:
+    ENVIRONMENT: staging
+    FRAUD_LOG_LEVEL: INFO
+    FRAUD_WORKERS: "4"
+    FRAUD_RISK_THRESHOLD: "0.75"
+    FRAUD_MODEL_PATH: /app/artifacts/fraud_model.joblib
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 65
+  pdb:
+    maxUnavailable: "50%"
+  persistence:
+    storageClass: "gp2"
+    size: 5Gi
+
+notificationService:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+    tag: "1.0.0-rc"
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+  pdb:
+    minAvailable: 1
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  host: "api.staging.nexus-settlement.example.com"
+  tls:
+    enabled: true
+    secretName: "nexus-staging-tls-cert"
+
+vault:
+  enabled: true
+  address: "https://vault.internal.example.com"
+  role: "nexus-settlement-staging"
+  secretPath: "nexus-staging/data/settlement-service"
+
+otel:
+  enabled: true
+  endpoint: "http://otel-collector.monitoring.svc.cluster.local:4318"
+
+retrainCronJob:
+  enabled: true
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3

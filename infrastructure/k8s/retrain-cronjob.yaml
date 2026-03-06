@@ -1,0 +1,60 @@
+---
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fraud-model-retrain
+  namespace: nexus-settlement
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: fraud-model-retrain
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: fraud-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: retrain
+              image: nexus/fraud-detection:latest
+              imagePullPolicy: Always
+              command:
+                - python
+                - /app/scripts/retrain_pipeline.py
+              args:
+                - "--n-samples=50000"
+                - "--min-auc=0.92"
+                - "--artifact=/app/artifacts/fraud_model.joblib"
+              env:
+                - name: KAFKA_BOOTSTRAP_SERVERS
+                  valueFrom:
+                    secretKeyRef:
+                      name: kafka-secrets
+                      key: bootstrap-servers
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: model-artifacts
+                  mountPath: /app/artifacts
+          volumes:
+            - name: model-artifacts
+              persistentVolumeClaim:
+                claimName: fraud-model-artifacts-pvc

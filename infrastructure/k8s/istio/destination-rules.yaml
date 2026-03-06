@@ -1,0 +1,100 @@
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: settlement-service
+  namespace: nexus-settlement
+spec:
+  host: settlement-service
+  trafficPolicy:
+    connectionPool:
+      http:
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 100
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api-gateway
+  namespace: nexus-settlement
+spec:
+  host: api-gateway
+  trafficPolicy:
+    connectionPool:
+      http:
+        http2MaxRequests: 2000
+        maxRequestsPerConnection: 200
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: fraud-detection
+  namespace: nexus-settlement
+spec:
+  host: fraud-detection
+  trafficPolicy:
+    connectionPool:
+      http:
+        http2MaxRequests: 500
+        maxRequestsPerConnection: 50
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 30s
+      baseEjectionTime: 60s
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: notification-service
+  namespace: nexus-settlement
+spec:
+  host: notification-service
+  trafficPolicy:
+    connectionPool:
+      http:
+        http2MaxRequests: 500
+        maxRequestsPerConnection: 50
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary

@@ -1,0 +1,350 @@
+name: CI
+
+on:
+  push:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          serviceAccountName: pg-backup-sa              emptyDir: {}            - name: tmp          volumes:                  mountPath: /tmp                - name: tmp              volumeMounts:                  memory: "512Mi"                  cpu: "500m"                limits:                  memory: "256Mi"                  cpu: "100m"                requests:              resources:                  echo "✓ Backup complete: $FILENAME"                    --sse-kms-key-id alias/nexus-pg-backups                    --sse aws:kms \                    "s3://$S3_BUCKET/daily/$FILENAME" \                  aws s3 cp "/tmp/$FILENAME" \                  echo "→ Uploading to s3://$S3_BUCKET/daily/$FILENAME"                    --file="/tmp/$FILENAME"                    --compress=9 \                    --format=custom \                  pg_dump \                  echo "→ Starting pg_dump: $FILENAME"                  FILENAME="nexus_settlement_$(date +%F_%H%M%S).dump"                  set -euo pipefail                - |                - -c                - /bin/sh              command:                  value: us-east-1                - name: AWS_DEFAULT_REGION                  value: nexus-pg-backups                - name: S3_BUCKET                  value: nexus_settlement                - name: PGDATABASE                  value: nexus                - name: PGUSER                  value: "5432"                - name: PGPORT                      key: POSTGRES_HOST                      name: nexus-config                    configMapKeyRef:                  valueFrom:                - name: PGHOST                      key: password                      name: nexus-db-credentials                    secretKeyRef:                  valueFrom:                - name: PGPASSWORD              env:                  drop: ["ALL"]                capabilities:                readOnlyRootFilesystem: false   # pg_dump writes to /tmp                allowPrivilegeEscalation: false              securityContext:              image: postgres:15-alpine            - name: pg-backup          containers:            runAsUser: 999   # postgres uid in official image            runAsNonRoot: true          securityContext:          restartPolicy: OnFailure        spec:      template:      activeDeadlineSeconds: 3600    spec:  jobTemplate:  failedJobsHistoryLimit: 3  successfulJobsHistoryLimit: 3  concurrencyPolicy: Forbid  schedule: "0 2 * * *"   # 02:00 UTC dailyspec:  namespace: nexus-settlement    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      settlement-service: ${{ steps.filter.outputs.settlement-service }}
+      fraud-detection: ${{ steps.filter.outputs.fraud-detection }}
+      notification-service: ${{ steps.filter.outputs.notification-service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api-gateway:
+              - 'services/api-gateway/**'
+            settlement-service:
+              - 'services/settlement-service/**'
+            fraud-detection:
+              - 'services/fraud-detection/**'
+            notification-service:
+              - 'services/notification-service/**'
+
+  api-gateway:
+    name: API Gateway — lint & test
+    needs: changes
+    if: ${{ needs.changes.outputs.api-gateway == 'true' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: services/api-gateway/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript compile check
+        run: npm run build
+      - name: ESLint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test -- --coverage --coverageThreshold='{"global":{"lines":80}}'
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-api-gateway
+          path: services/api-gateway/coverage/
+
+  settlement-service:
+    name: Settlement Service — lint & test
+    needs: changes
+    if: ${{ needs.changes.outputs.settlement-service == 'true' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/settlement-service
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nexus_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: nexus_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      REDIS_URL: "redis://localhost:6379/0"
+      KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
+      JWT_PRIVATE_KEY_BASE64: "dGVzdA=="
+      JWT_PUBLIC_KEY_BASE64: "dGVzdA=="
+      ENVIRONMENT: testing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: services/settlement-service/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Ruff lint (PEP 8 + fast checks)
+        run: ruff check app/ tests/
+      - name: Black formatting check
+        run: black --check app/ tests/
+      - name: mypy type check
+        run: mypy app/
+      - name: Bandit security analysis (OWASP A06)
+        run: bandit -r app/ -ll -x app/tests
+      - name: pytest with coverage
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-fail-under=80 \
+            -v
+      - name: Kafka contract tests
+        run: pytest tests/test_kafka_contracts.py -v
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-settlement
+          path: services/settlement-service/coverage.xml
+
+  fraud-detection:
+    name: Fraud Detection — lint & test
+    needs: changes
+    if: ${{ needs.changes.outputs.fraud-detection == 'true' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/fraud-detection
+    env:
+      FRAUD_MODEL_PATH: /tmp/fraud_model_test.joblib
+      ENVIRONMENT: testing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: services/fraud-detection/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Ruff lint
+        run: ruff check app/ tests/
+      - name: Black formatting check
+        run: black --check app/ tests/
+      - name: mypy type check
+        run: mypy app/
+      - name: Bandit security analysis
+        run: bandit -r app/ -ll
+      - name: pytest with coverage
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-fail-under=80 \
+            -v
+      - name: Kafka contract tests
+        run: pytest tests/test_kafka_fraud_contracts.py -v
+
+  notification-service:
+    name: Notification Service — lint & test
+    needs: changes
+    if: ${{ needs.changes.outputs.notification-service == 'true' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/notification-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: services/notification-service/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript compile check
+        run: npm run build
+      - name: ESLint
+        run: npm run lint
+      - name: Tests
+        run: npm test -- --coverage --coverageThreshold='{"global":{"lines":80}}'
+      - name: Kafka contract tests
+        run: npm test -- --testPathPattern=kafka.contracts --no-coverage
+
+  integration-tests:
+    name: Integration tests (full stack)
+    runs-on: ubuntu-latest
+    needs: [api-gateway, settlement-service, fraud-detection, notification-service]
+    # Only run on push to main/develop to avoid spinning up Docker for every PR
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Copy .env.example
+        run: cp .env.example .env
+
+      - name: Start stack
+        run: docker compose up --build -d --wait
+        timeout-minutes: 5
+
+      - name: Run Alembic migrations
+        run: docker compose exec -T settlement-service alembic upgrade head
+
+      - name: Install integration test dependencies
+        run: pip install -q -r tests/integration/requirements.txt
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v -m integration --tb=short
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down --remove-orphans -v
+
+  docker-build:
+    name: Docker build (all services)
+    runs-on: ubuntu-latest
+    needs: [api-gateway, settlement-service, fraud-detection, notification-service]
+    if: always() && !failure() && !cancelled()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build api-gateway image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/api-gateway
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build settlement-service image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/settlement-service
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build fraud-detection image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/fraud-detection
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build notification-service image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/notification-service
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,48 @@
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+  namespace: nexus-settlement
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: settlement-service-pdb
+  namespace: nexus-settlement
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: settlement-service
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraud-detection-pdb
+  namespace: nexus-settlement
+spec:
+  maxUnavailable: 50%
+  selector:
+    matchLabels:
+      app: fraud-detection
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+  namespace: nexus-settlement
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-service

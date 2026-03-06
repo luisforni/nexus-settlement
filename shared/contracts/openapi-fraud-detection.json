@@ -1,0 +1,630 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Nexus Settlement Service",
+    "description": "Distributed financial settlement management.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/settlements": {
+      "get": {
+        "tags": [
+          "Settlements"
+        ],
+        "summary": "List settlements (paginated)",
+        "description": "Return a paginated list of settlements.\n\nSupports filtering by ``status``.",
+        "operationId": "list_settlements_api_v1_settlements_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SettlementStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Settlements"
+        ],
+        "summary": "Create a settlement",
+        "description": "Create a new settlement.\n\nThe ``Idempotency-Key`` header (UUID v4) is required.\nSubmitting the same key multiple times returns the original response\nwithout creating a duplicate settlement.",
+        "operationId": "create_settlement_api_v1_settlements_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Client-generated UUID v4 for idempotency. Required.",
+              "title": "Idempotency-Key"
+            },
+            "description": "Client-generated UUID v4 for idempotency. Required."
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Authenticated user ID injected by the API gateway from the verified JWT sub claim.",
+              "title": "X-User-Id"
+            },
+            "description": "Authenticated user ID injected by the API gateway from the verified JWT sub claim."
+          },
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Distributed trace correlation ID.",
+              "title": "X-Request-Id"
+            },
+            "description": "Distributed trace correlation ID."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settlements/{settlement_id}": {
+      "get": {
+        "tags": [
+          "Settlements"
+        ],
+        "summary": "Get a settlement by ID",
+        "description": "Retrieve a single settlement by its UUID.",
+        "operationId": "get_settlement_api_v1_settlements__settlement_id__get",
+        "parameters": [
+          {
+            "name": "settlement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Settlement Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settlements/{settlement_id}/cancel": {
+      "patch": {
+        "tags": [
+          "Settlements"
+        ],
+        "summary": "Cancel a pending or processing settlement",
+        "description": "Cancel a PENDING or PROCESSING settlement.\n\nReturns 409 Conflict for invalid state transitions.",
+        "operationId": "cancel_settlement_api_v1_settlements__settlement_id__cancel_patch",
+        "parameters": [
+          {
+            "name": "settlement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Settlement Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Authenticated user ID injected by the API gateway from the verified JWT sub claim.",
+              "title": "X-User-Id"
+            },
+            "description": "Authenticated user ID injected by the API gateway from the verified JWT sub claim."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settlements/{settlement_id}/reverse": {
+      "patch": {
+        "tags": [
+          "Settlements"
+        ],
+        "summary": "Reverse a completed settlement",
+        "description": "Reverse a COMPLETED settlement.\n\nOnly COMPLETED settlements can be reversed.\nReturns 409 Conflict for invalid state transitions.",
+        "operationId": "reverse_settlement_api_v1_settlements__settlement_id__reverse_patch",
+        "parameters": [
+          {
+            "name": "settlement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Settlement Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Authenticated user ID injected by the API gateway from the verified JWT sub claim.",
+              "title": "X-User-Id"
+            },
+            "description": "Authenticated user ID injected by the API gateway from the verified JWT sub claim."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateSettlementRequest": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key",
+            "description": "Client-generated UUID v4 used to deduplicate requests."
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount",
+            "description": "Settlement amount. Must be positive, max 10,000,000."
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "description": "ISO 4217 currency code (e.g. USD, EUR, GBP)."
+          },
+          "payer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payer Id",
+            "description": "UUID of the paying party from the identity service."
+          },
+          "payee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payee Id",
+            "description": "UUID of the receiving party from the identity service."
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email",
+            "description": "User email address for settlement completion notifications."
+          },
+          "user_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Phone",
+            "description": "User phone number (E.164 format) for SMS notifications."
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url",
+            "description": "HTTPS webhook URL to call on settlement completion."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "amount",
+          "currency",
+          "payer_id",
+          "payee_id"
+        ],
+        "title": "CreateSettlementRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "SettlementListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "SettlementListResponse"
+      },
+      "SettlementResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SettlementStatus"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "payer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payer Id"
+          },
+          "payee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payee Id"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "idempotency_key",
+          "status",
+          "amount",
+          "currency",
+          "payer_id",
+          "payee_id",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SettlementResponse"
+      },
+      "SettlementStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "PROCESSING",
+          "COMPLETED",
+          "FAILED",
+          "REVERSED",
+          "CANCELLED"
+        ],
+        "title": "SettlementStatus"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

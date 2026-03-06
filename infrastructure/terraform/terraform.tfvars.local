@@ -1,0 +1,44 @@
+# terraform.tfvars.local — valores para simulación local con LocalStack
+#
+# USO:
+#   cd infrastructure/terraform
+#   terraform init
+#   terraform apply -var-file="terraform.tfvars.local"
+#
+# NOTA: Este archivo SÍ puede commitearse ya que son valores de desarrollo local
+#       (no credenciales reales de AWS). Los valores sensibles usan los mismos
+#       que en .env.example.
+
+project     = "nexus-settlement"
+environment = "local"
+aws_region  = "us-east-1"
+
+# LocalStack escucha en este puerto en docker-compose
+localstack_endpoint = "http://localhost:4566"
+
+# ── Networking ────────────────────────────────────────────────────────────────
+vpc_cidr = "10.0.0.0/16"
+
+# ── RDS ───────────────────────────────────────────────────────────────────────
+db_name           = "nexus_settlement"
+db_username       = "nexus_user"
+db_password       = "CHANGE_ME_db_password"   # mismo valor que POSTGRES_PASSWORD en .env
+rds_instance_class    = "db.t3.micro"
+rds_allocated_storage = 20
+
+# ── ElastiCache ───────────────────────────────────────────────────────────────
+redis_auth_token         = "CHANGE_ME_redis_token"  # mínimo 16 caracteres
+elasticache_node_type    = "cache.t3.micro"
+elasticache_num_replicas = 0                        # single-node para local
+
+# ── MSK ───────────────────────────────────────────────────────────────────────
+msk_broker_instance_type = "kafka.t3.small"
+msk_num_brokers          = 1                        # 1 broker para local
+
+kafka_topics = [
+  { name = "nexus.settlements",     partitions = 3, replication_factor = 1 },
+  { name = "nexus.fraud.alerts",    partitions = 3, replication_factor = 1 },
+  { name = "nexus.notifications",   partitions = 3, replication_factor = 1 },
+  { name = "nexus.settlements.dlq", partitions = 1, replication_factor = 1 },
+  { name = "nexus.fraud.dlq",       partitions = 1, replication_factor = 1 },
+]

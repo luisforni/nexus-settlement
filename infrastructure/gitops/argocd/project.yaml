@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: nexus
+  namespace: argocd
+spec:
+  description: "Nexus Settlement Platform — all microservices and infrastructure"
+
+  sourceRepos:
+    - 'https://github.com/your-org/nexus-settlement.git'
+
+  destinations:
+    - namespace: nexus-settlement
+      server: https://kubernetes.default.svc
+    - namespace: nexus-staging
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: networking.istio.io
+      kind: PeerAuthentication
+    - group: networking.istio.io
+      kind: AuthorizationPolicy
+
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  roles:
+    - name: developer
+      description: "Read-only access for developers — can only sync non-production apps"
+      policies:
+        - p, proj:nexus:developer, applications, get, nexus/*, allow
+        - p, proj:nexus:developer, applications, sync, nexus/nexus-settlement-staging, allow
+      groups:
+        - nexus-developers
+
+    - name: ci-deployer
+      description: "CI/CD pipeline role — can sync and override images"
+      policies:
+        - p, proj:nexus:ci-deployer, applications, get, nexus/*, allow
+        - p, proj:nexus:ci-deployer, applications, sync, nexus/*, allow
+        - p, proj:nexus:ci-deployer, applications, override, nexus/*, allow
+      groups:
+        - nexus-ci
+
+    - name: ops-admin
+      description: "Full project access for operations team"
+      policies:
+        - p, proj:nexus:ops-admin, applications, *, nexus/*, allow
+      groups:
+        - nexus-ops

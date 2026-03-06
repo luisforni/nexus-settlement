@@ -1,0 +1,160 @@
+---
+
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-mtls
+  namespace: nexus-settlement
+spec:
+  mtls:
+    mode: STRICT
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: settlement-service-dr
+  namespace: nexus-settlement
+spec:
+  host: settlement-service.nexus-settlement.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        h2UpgradePolicy: UPGRADE
+        idleTimeout: 60s
+        http1MaxPendingRequests: 1024
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: fraud-detection-dr
+  namespace: nexus-settlement
+spec:
+  host: fraud-detection.nexus-settlement.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 512
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 10s
+      baseEjectionTime: 15s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api-gateway-dr
+  namespace: nexus-settlement
+spec:
+  host: api-gateway.nexus-settlement.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: notification-service-dr
+  namespace: nexus-settlement
+spec:
+  host: notification-service.nexus-settlement.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+---
+
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-gateway-to-settlement
+  namespace: nexus-settlement
+spec:
+  selector:
+    matchLabels:
+      app: settlement-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/nexus-settlement/sa/api-gateway-sa"
+      to:
+        - operation:
+            methods: ["GET", "POST", "PATCH"]
+            paths: ["/api/v1/*"]
+---
+
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-callers-to-fraud
+  namespace: nexus-settlement
+spec:
+  selector:
+    matchLabels:
+      app: fraud-detection
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/nexus-settlement/sa/settlement-sa"
+              - "cluster.local/ns/nexus-settlement/sa/api-gateway-sa"
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/api/v1/fraud/*"]
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: settlement-service-vs
+  namespace: nexus-settlement
+spec:
+  hosts:
+    - settlement-service.nexus-settlement.svc.cluster.local
+  http:
+    - timeout: 10s
+      retries:
+        attempts: 3
+        perTryTimeout: 3s
+        retryOn: connect-failure,refused-stream,gateway-error,5xx
+      route:
+        - destination:
+            host: settlement-service.nexus-settlement.svc.cluster.local
+            port:
+              number: 8001
+---
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: fraud-detection-vs
+  namespace: nexus-settlement
+spec:
+  hosts:
+    - fraud-detection.nexus-settlement.svc.cluster.local
+  http:
+    - timeout: 4s
+      retries:
+        attempts: 2
+        perTryTimeout: 2s
+        retryOn: connect-failure,gateway-error
+      route:
+        - destination:
+            host: fraud-detection.nexus-settlement.svc.cluster.local
+            port:
+              number: 8002
