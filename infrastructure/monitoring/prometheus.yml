@@ -1,0 +1,45 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: 'development'
+    project: 'nexus-settlement'
+
+rule_files:
+  - 'alerts/*.yml'
+
+scrape_configs:
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:3000']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '$1'
+
+  - job_name: 'settlement-service'
+    static_configs:
+      - targets: ['settlement-service:8001']
+    metrics_path: /metrics
+
+  - job_name: 'fraud-detection'
+    static_configs:
+      - targets: ['fraud-detection:8002']
+    metrics_path: /metrics
+
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service:8003']
+    metrics_path: /metrics
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9092']
+    metrics_path: /metrics

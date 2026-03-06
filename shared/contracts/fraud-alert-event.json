@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nexus-settlement/contracts/fraud-alert-event.json",
+  "title": "FraudAlertEvent",
+  "description": "Kafka event envelope for fraud detection decisions published on nexus.fraud.alerts",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "timestamp", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": {
+      "type": "string",
+      "enum": ["fraud.scored", "fraud.review", "fraud.blocked"]
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": [
+        "transaction_id", "settlement_id", "risk_score",
+        "decision", "model_version", "features_used"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "transaction_id": { "type": "string", "format": "uuid" },
+        "settlement_id": { "type": "string", "format": "uuid" },
+        "risk_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "decision": {
+          "type": "string",
+          "enum": ["APPROVE", "REVIEW", "BLOCK"]
+        },
+        "model_version": { "type": "string" },
+        "features_used": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of features fed to the model"
+        },
+        "top_risk_factors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["feature", "shap_value"],
+            "properties": {
+              "feature": { "type": "string" },
+              "shap_value": { "type": "number" },
+              "contribution": {
+                "type": "string",
+                "enum": ["increases_risk", "decreases_risk"]
+              }
+            }
+          },
+          "maxItems": 10
+        },
+        "rule_triggered": {
+          "type": ["string", "null"],
+          "description": "Human-readable name of a rule-based override that fired, if any"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "End-to-end scoring latency in milliseconds"
+        }
+      }
+    }
+  }
+}

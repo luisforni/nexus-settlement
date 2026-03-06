@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "nexus-settlement-service"
+version = "1.0.0"
+description = "Nexus Settlement — Settlement microservice (Python/FastAPI)"
+requires-python = ">=3.12"
+readme = "README.md"
+
+# ── Ruff (PEP 8 + additional rules) ──────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+indent-width = 4
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (security)
+    "N",    # pep8-naming
+    "ANN",  # flake8-annotations (type hints)
+    "PTH",  # pathlib usage
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "S101",   # assert usage in tests is fine
+    "ANN101", # self annotation not required
+    "ANN401", # Any is sometimes necessary
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "ANN"]  # relax in tests
+"alembic/**" = ["ANN", "N999"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ── Black ─────────────────────────────────────────────────────
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+# ── mypy ──────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ── pytest ────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-q",
+]
+
+# ── Bandit (SAST) ─────────────────────────────────────────────
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "alembic"]
+skips = ["B101"]   # allow assert in tests

@@ -1,0 +1,60 @@
+import json
+import logging
+import sys
+from typing import Any, Optional
+
+from app.core.config import settings
+
+_REDACTED_FIELDS = frozenset({"password", "token", "secret", "authorization"})
+_REDACTED_VALUE = "[REDACTED]"
+
+def _redact(obj: Any, depth: int = 0) -> Any:
+
+    if depth > 8:
+        return obj
+    if isinstance(obj, dict):
+        return {
+            k: _REDACTED_VALUE if k.lower() in _REDACTED_FIELDS else _redact(v, depth + 1)
+            for k, v in obj.items()
+        }
+    if isinstance(obj, (list, tuple)):
+        return [_redact(item, depth + 1) for item in obj]
+    return obj
+
+class JsonFormatter(logging.Formatter):
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_data: dict[str, Any] = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%03dZ"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "service": "fraud-detection",
+            "environment": settings.ENVIRONMENT,
+        }
+        for key, value in record.__dict__.items():
+            if key not in {
+                "name", "msg", "args", "levelname", "levelno", "pathname",
+                "filename", "module", "exc_info", "exc_text", "stack_info",
+                "lineno", "funcName", "created", "msecs", "relativeCreated",
+                "thread", "threadName", "processName", "process", "message",
+                "taskName",
+            }:
+                log_data[key] = _redact(value)
+        if record.exc_info:
+            log_data["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_data, default=str)
+
+def _configure_logging() -> None:
+    level = getattr(logging, settings.FRAUD_LOG_LEVEL.upper(), logging.INFO)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter())
+    root = logging.getLogger()
+    root.setLevel(level)
+    root.handlers = [handler]
+
+_configure_logging()
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+
+    return logging.getLogger(name)
